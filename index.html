@@ -3,29 +3,20 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <!-- === 移动端 Web App 配置 (新增：让微信认为这是个App) === -->
+    <!-- === 移动端 Web App 配置 === -->
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
-    <!-- ==================================================== -->
-
+    
     <title>群力神经外科评分助手</title>
     
-    <!-- === 社交分享卡片配置 === -->
+    <!-- === 社交分享配置 === -->
     <meta name="description" content="包含 GCS、NIHSS、ASPECTS、Hunt-Hess 等常用临床评分工具，辅助快速评估。">
-    <!-- 标题 -->
     <meta property="og:title" content="群力神经外科评分助手">
-    <meta itemprop="name" content="群力神经外科评分助手">
-    
-    <!-- 描述 -->
-    <meta property="og:description" content="包含 GCS、NIHSS、ASPECTS (前后循环)、Hunt-Hess 等常用临床评分工具，辅助快速评估。">
-    <meta itemprop="description" content="包含 GCS、NIHSS、ASPECTS (前后循环)、Hunt-Hess 等常用临床评分工具，辅助快速评估。">
-    
-    <!-- 图标 -->
+    <meta property="og:description" content="包含 GCS、NIHSS、ASPECTS、Hunt-Hess 等常用临床评分工具。">
+    <!-- 绝对路径通常更稳，但相对路径在同目录下也行 -->
     <meta property="og:image" content="logo.png">
-    <meta itemprop="image" content="logo.png">
-    <!-- ================================= -->
-
+    
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         /* 微信/移动端专用：禁止字体自动放大，保持布局稳定 */
@@ -122,14 +113,13 @@
 </head>
 <body class="bg-slate-100 text-slate-800 h-screen overflow-hidden">
 
-    <!-- === 微信分享优化 Hack: 隐藏的第一张图 === -->
-    <!-- 微信会默认抓取网页中的第一张大图作为缩略图。
-         这里我们在页面最开始放一张看不见的图片，强制让微信抓取它。
-         注意：图片必须大于300x300像素，且必须真实存在。 -->
-    <div style="position:absolute; top:0; left:0; width:0px; height:0px; overflow:hidden; z-index:-1;">
-        <img src="logo.png" alt="icon" style="width:400px; height:400px;">
+    <!-- === 微信分享首图 Hack (最终版) === -->
+    <!-- 使用 div 包裹 img，设置宽高为 0 且溢出隐藏。这是最经典的微信抓取方案 -->
+    <div style="margin:0 auto;width:0px;height:0px;overflow:hidden;">
+        <!-- 这里的 logo.png 必须真实存在于仓库中，且建议是正方形 -->
+        <img src="logo.png" width="700">
     </div>
-    <!-- ========================================= -->
+    <!-- ================================== -->
 
     <!-- === 1. 首页 (Dashboard) === -->
     <section id="view-home" class="view-section active bg-slate-100">
