@@ -12,6 +12,7 @@
     <title>群力神经外科评分助手</title>
     
     <!-- === 社交分享卡片配置 === -->
+    <meta name="description" content="包含 GCS、NIHSS、ASPECTS、Hunt-Hess 等常用临床评分工具，辅助快速评估。">
     <!-- 标题 -->
     <meta property="og:title" content="群力神经外科评分助手">
     <meta itemprop="name" content="群力神经外科评分助手">
@@ -120,6 +121,15 @@
     </style>
 </head>
 <body class="bg-slate-100 text-slate-800 h-screen overflow-hidden">
+
+    <!-- === 微信分享优化 Hack: 隐藏的第一张图 === -->
+    <!-- 微信会默认抓取网页中的第一张大图作为缩略图。
+         这里我们在页面最开始放一张看不见的图片，强制让微信抓取它。
+         注意：图片必须大于300x300像素，且必须真实存在。 -->
+    <div style="position:absolute; top:0; left:0; width:0px; height:0px; overflow:hidden; z-index:-1;">
+        <img src="logo.png" alt="icon" style="width:400px; height:400px;">
+    </div>
+    <!-- ========================================= -->
 
     <!-- === 1. 首页 (Dashboard) === -->
     <section id="view-home" class="view-section active bg-slate-100">
