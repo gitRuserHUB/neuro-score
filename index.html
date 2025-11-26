@@ -11,10 +11,10 @@
     <title>群力神经外科评分助手</title>
     
     <!-- === 社交分享配置 === -->
+    <!-- 注意：微信抓取不稳定，下面这些meta标签是给其他App看的，微信主要看正文 -->
     <meta name="description" content="包含 GCS、NIHSS、ASPECTS、Hunt-Hess 等常用临床评分工具，辅助快速评估。">
     <meta property="og:title" content="群力神经外科评分助手">
     <meta property="og:description" content="包含 GCS、NIHSS、ASPECTS、Hunt-Hess 等常用临床评分工具。">
-    <!-- 绝对路径通常更稳，但相对路径在同目录下也行 -->
     <meta property="og:image" content="logo.png">
     
     <script src="https://cdn.tailwindcss.com"></script>
@@ -113,11 +113,16 @@
 </head>
 <body class="bg-slate-100 text-slate-800 h-screen overflow-hidden">
 
-    <!-- === 微信分享首图 Hack (最终版) === -->
-    <!-- 使用 div 包裹 img，设置宽高为 0 且溢出隐藏。这是最经典的微信抓取方案 -->
-    <div style="margin:0 auto;width:0px;height:0px;overflow:hidden;">
-        <!-- 这里的 logo.png 必须真实存在于仓库中，且建议是正方形 -->
-        <img src="logo.png" width="700">
+    <!-- === 微信分享 Hack (终极修正版) === -->
+    <!-- 
+         原理：不使用 display:none 或移出屏幕，而是让它透明且处于最底层。
+         这样微信爬虫会认为这是正文的第一张有效大图。
+    -->
+    <div style="position:absolute; opacity:0; width:400px; height:400px; z-index:-1; pointer-events:none; top:0; left:0; overflow:hidden;">
+        <!-- 这里的 logo.png 必须与GitHub仓库里的文件名大小写完全一致！ -->
+        <img src="logo.png" alt="icon" width="400" height="400">
+        <!-- 强制描述文字 -->
+        <p>包含 GCS、NIHSS、ASPECTS (前后循环)、Hunt-Hess 等常用临床评分工具，辅助快速评估。</p>
     </div>
     <!-- ================================== -->
 
