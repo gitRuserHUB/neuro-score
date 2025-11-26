@@ -1,0 +1,916 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <!-- === 移动端 Web App 配置 (新增：让微信认为这是个App) === -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="format-detection" content="telephone=no">
+    <!-- ==================================================== -->
+
+    <title>群力神经外科评分助手</title>
+    
+    <!-- === 社交分享卡片配置 === -->
+    <!-- 标题 -->
+    <meta property="og:title" content="群力神经外科评分助手">
+    <meta itemprop="name" content="群力神经外科评分助手">
+    
+    <!-- 描述 -->
+    <meta property="og:description" content="包含 GCS、NIHSS、ASPECTS (前后循环)、Hunt-Hess 等常用临床评分工具，辅助快速评估。">
+    <meta itemprop="description" content="包含 GCS、NIHSS、ASPECTS (前后循环)、Hunt-Hess 等常用临床评分工具，辅助快速评估。">
+    
+    <!-- 图标 -->
+    <meta property="og:image" content="logo.png">
+    <meta itemprop="image" content="logo.png">
+    <!-- ================================= -->
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* 微信/移动端专用：禁止字体自动放大，保持布局稳定 */
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; 
+            -webkit-text-size-adjust: 100% !important;
+            text-size-adjust: 100% !important;
+        }
+        
+        /* 视图切换 */
+        .view-section { display: none; height: 100vh; flex-direction: column; }
+        .view-section.active { display: flex; }
+
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        /* 隐藏滚动条 */
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        /* 按钮交互样式 */
+        .option-btn { transition: all 0.2s; border: 1px solid #e2e8f0; position: relative; overflow: hidden; }
+        .option-btn:active { transform: scale(0.99); }
+        .option-btn.selected {
+            border-color: #3b82f6; background-color: #eff6ff; color: #1d4ed8;
+            box-shadow: 0 0 0 1px #3b82f6 inset;
+        }
+        .option-btn.selected .score-badge { background-color: #3b82f6; color: white; }
+
+        /* 首页卡片 - 立体感设计 */
+        .home-card { 
+            transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+            background: linear-gradient(145deg, #ffffff, #f8fafc);
+            border: 1px solid rgba(255,255,255,0.8);
+            border-radius: 1.25rem;
+            position: relative;
+            overflow: hidden;
+            box-shadow: 
+                0 4px 6px -1px rgba(0, 0, 0, 0.05),
+                0 10px 15px -3px rgba(0, 0, 0, 0.05),
+                inset 0 0 0 1px rgba(255,255,255,0.5);
+        }
+        .home-card:active { transform: scale(0.98); box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        .home-card:hover { 
+            transform: translateY(-4px); 
+            box-shadow: 
+                0 20px 25px -5px rgba(0, 0, 0, 0.1), 
+                0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        }
+        
+        /* 装饰性光晕 */
+        .card-glow {
+            position: absolute;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            filter: blur(25px);
+            opacity: 0.4;
+            top: -10px;
+            right: -10px;
+            z-index: 0;
+        }
+        
+        /* 计时器按钮动画 */
+        @keyframes pulse-border {
+            0% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7); }
+            70% { box-shadow: 0 0 0 6px rgba(59, 130, 246, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
+        }
+        .timer-active {
+            animation: pulse-border 1.5s infinite;
+            background-color: #dbeafe !important;
+            color: #1e40af !important;
+        }
+        
+        /* 建议框样式 */
+        .advice-box {
+            background: linear-gradient(to right, #f8fafc, #f1f5f9);
+            border-left: 4px solid #cbd5e1;
+        }
+        .advice-box.urgent { border-left-color: #ef4444; background: #fef2f2; }
+        .advice-box.suggest { border-left-color: #22c55e; background: #f0fdf4; }
+        .advice-box.caution { border-left-color: #eab308; background: #fefce8; }
+
+        /* 参考图样式 */
+        .ref-image {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            border-radius: 0.5rem;
+            background-color: #000;
+        }
+    </style>
+</head>
+<body class="bg-slate-100 text-slate-800 h-screen overflow-hidden">
+
+    <!-- === 1. 首页 (Dashboard) === -->
+    <section id="view-home" class="view-section active bg-slate-100">
+        <!-- 头部设计 -->
+        <div class="relative bg-slate-900 text-white rounded-b-[3rem] shadow-2xl overflow-hidden shrink-0 pb-12 pt-14 z-20">
+            <!-- 背景装饰 -->
+            <div class="absolute inset-0 bg-gradient-to-br from-slate-800 via-slate-900 to-black"></div>
+            <div class="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none opacity-60">
+                <div class="absolute top-[-20%] left-[-20%] w-[80%] h-[80%] bg-blue-600/30 rounded-full blur-[80px]"></div>
+                <div class="absolute bottom-[-20%] right-[-10%] w-[60%] h-[60%] bg-indigo-600/30 rounded-full blur-[60px]"></div>
+                <div class="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAiIGhlaWdodD0iMjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGNpcmNsZSBjeD0iMSIgY3k9IjEiIHI9IjEiIGZpbGw9InJnYmEoMjU1LDI1NSwyNTUsMC4wOCkiLz48L3N2Zz4=')]"></div>
+            </div>
+            
+            <!-- 作者标签 -->
+            <div class="absolute top-6 right-6 z-30">
+                <div class="bg-white/5 backdrop-blur-md border border-white/10 text-white/70 text-[10px] font-medium px-3 py-1 rounded-full shadow-lg">
+                    Design by 李建桥
+                </div>
+            </div>
+
+            <div class="relative px-8 flex flex-col items-center text-center z-10">
+                <!-- 3D 悬浮图标 -->
+                <div class="w-16 h-16 bg-gradient-to-tr from-blue-600 to-cyan-400 rounded-2xl flex items-center justify-center shadow-[0_10px_20px_-5px_rgba(37,99,235,0.5)] mb-5 text-white transform rotate-3 border border-white/10">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="drop-shadow-md"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+                </div>
+                
+                <h1 class="text-2xl font-bold tracking-wide text-white drop-shadow-lg flex flex-col items-center gap-1">
+                    <span class="text-blue-400 text-[10px] font-extrabold uppercase tracking-[0.3em] opacity-90">NEUROSURGERY ASSISTANT</span>
+                    <span class="text-3xl bg-clip-text text-transparent bg-gradient-to-b from-white to-slate-300">群力神经外科评分助手</span>
+                </h1>
+            </div>
+        </div>
+
+        <!-- 卡片网格 -->
+        <div class="flex-1 px-6 -mt-8 z-20 pb-8 overflow-y-auto overflow-x-hidden">
+            <div class="grid grid-cols-2 gap-5 max-w-md mx-auto">
+                
+                <!-- GCS Card -->
+                <div onclick="enterApp('gcs')" class="home-card p-5 cursor-pointer group">
+                    <div class="card-glow bg-blue-500"></div>
+                    <div class="relative flex flex-col h-full justify-between items-start z-10">
+                        <div class="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center text-blue-600 mb-3 shadow-inner group-hover:scale-110 transition-transform duration-300">
+                            <span class="font-black text-sm">GCS</span>
+                        </div>
+                        <div>
+                            <h3 class="font-bold text-base text-slate-800 tracking-tight">格拉斯哥昏迷</h3>
+                            <p class="text-xs text-slate-500 mt-1 font-medium">意识障碍评估</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- NIHSS Card -->
+                <div onclick="enterApp('nihss')" class="home-card p-5 cursor-pointer group">
+                    <div class="card-glow bg-indigo-500"></div>
+                    <div class="relative flex flex-col h-full justify-between items-start z-10">
+                        <div class="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600 mb-3 shadow-inner group-hover:scale-110 transition-transform duration-300">
+                            <span class="font-black text-sm">NIH</span>
+                        </div>
+                        <div>
+                            <h3 class="font-bold text-base text-slate-800 tracking-tight">NIHSS 评分</h3>
+                            <p class="text-xs text-slate-500 mt-1 font-medium">脑卒中神经缺损</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ASPECTS Card -->
+                <div onclick="enterApp('aspects')" class="home-card p-5 cursor-pointer group">
+                    <div class="card-glow bg-rose-500"></div>
+                    <div class="relative flex flex-col h-full justify-between items-start z-10">
+                        <div class="w-10 h-10 bg-rose-50 rounded-xl flex items-center justify-center text-rose-600 mb-3 shadow-inner group-hover:scale-110 transition-transform duration-300">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/></svg>
+                        </div>
+                        <div>
+                            <h3 class="font-bold text-base text-slate-800 tracking-tight">ASPECTS</h3>
+                            <p class="text-xs text-slate-500 mt-1 font-medium">CT早期缺血评分</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Hunt-Hess Card -->
+                <div onclick="enterApp('hunthess')" class="home-card p-5 cursor-pointer group">
+                    <div class="card-glow bg-amber-500"></div>
+                    <div class="relative flex flex-col h-full justify-between items-start z-10">
+                        <div class="w-10 h-10 bg-amber-50 rounded-xl flex items-center justify-center text-amber-600 mb-3 shadow-inner group-hover:scale-110 transition-transform duration-300">
+                            <span class="font-black text-sm">HH</span>
+                        </div>
+                        <div>
+                            <h3 class="font-bold text-base text-slate-800 tracking-tight">Hunt-Hess</h3>
+                            <p class="text-xs text-slate-500 mt-1 font-medium">蛛网膜下腔出血</p>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+            
+            <div class="text-center mt-10">
+                <div class="inline-block px-4 py-1.5 rounded-full bg-slate-200/50 border border-slate-300/50 backdrop-blur-sm">
+                    <p class="text-[10px] text-slate-400 font-medium">仅供临床参考 · 请结合实际情况</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- === 2. 应用内页 (Detail View) === -->
+    <section id="view-app" class="view-section bg-gray-50">
+        
+        <!-- 顶部导航 -->
+        <header class="bg-white shadow-sm z-10 shrink-0">
+            <div class="px-3 py-3 bg-slate-900 text-white flex justify-between items-center">
+                <button onclick="goHome()" class="flex items-center gap-1 text-slate-300 hover:text-white transition-colors pl-1">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+                    <span class="text-sm font-medium">返回</span>
+                </button>
+                <h1 class="text-md font-bold tracking-wide text-center" id="header-title">评分详情</h1>
+                <button onclick="resetAll()" class="text-xs bg-white/20 px-3 py-1.5 rounded-full hover:bg-white/30 text-white backdrop-blur-sm transition-all">重置</button>
+            </div>
+            
+            <!-- Tab 栏 -->
+            <div class="flex overflow-x-auto no-scrollbar border-b border-gray-200 bg-white">
+                <button onclick="switchTab('gcs')" id="tab-btn-gcs" class="tab-btn flex-1 py-3 px-2 text-sm font-medium border-b-2 border-transparent text-gray-500 whitespace-nowrap transition-colors">GCS</button>
+                <button onclick="switchTab('nihss')" id="tab-btn-nihss" class="tab-btn flex-1 py-3 px-2 text-sm font-medium border-b-2 border-transparent text-gray-500 whitespace-nowrap transition-colors">NIHSS</button>
+                <button onclick="switchTab('aspects')" id="tab-btn-aspects" class="tab-btn flex-1 py-3 px-2 text-sm font-medium border-b-2 border-transparent text-gray-500 whitespace-nowrap transition-colors">ASPECTS</button>
+                <button onclick="switchTab('hunthess')" id="tab-btn-hunthess" class="tab-btn flex-1 py-3 px-2 text-sm font-medium border-b-2 border-transparent text-gray-500 whitespace-nowrap transition-colors">Hunt-Hess</button>
+            </div>
+        </header>
+
+        <!-- 内容区域 -->
+        <main class="flex-1 overflow-y-auto p-4 pb-48 scroll-smooth">
+            
+            <!-- 1. GCS 模块 -->
+            <div id="gcs" class="tab-content max-w-2xl mx-auto space-y-6">
+                <div class="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+                    <h3 class="text-sm font-bold text-slate-700 mb-3 border-l-4 border-blue-500 pl-2">睁眼反应 (E)</h3>
+                    <div class="grid gap-2" id="gcs-e-options"></div>
+                </div>
+                <div class="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+                    <h3 class="text-sm font-bold text-slate-700 mb-3 border-l-4 border-blue-500 pl-2">语言反应 (V)</h3>
+                    <div class="grid gap-2" id="gcs-v-options"></div>
+                </div>
+                <div class="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+                    <h3 class="text-sm font-bold text-slate-700 mb-3 border-l-4 border-blue-500 pl-2">运动反应 (M)</h3>
+                    <div class="grid gap-2" id="gcs-m-options"></div>
+                </div>
+                <div class="flex items-center gap-3 p-4 bg-amber-50 text-amber-900 rounded-xl text-sm border border-amber-100 shadow-sm">
+                    <input type="checkbox" id="gcs-t-flag" class="w-5 h-5 text-amber-600 rounded focus:ring-amber-500" onchange="updateGCS()">
+                    <label for="gcs-t-flag" class="font-medium">患者已气管插管/切开 (记录为 T)</label>
+                </div>
+            </div>
+
+            <!-- 2. NIHSS 模块 -->
+            <div id="nihss" class="tab-content max-w-2xl mx-auto space-y-4">
+                <div id="nihss-container"></div>
+            </div>
+
+            <!-- 3. ASPECTS 模块 -->
+            <div id="aspects" class="tab-content max-w-2xl mx-auto space-y-4">
+                
+                <!-- 循环切换器 -->
+                <div class="bg-white p-1 rounded-lg border border-gray-200 flex mb-4 shadow-sm">
+                    <button onclick="setAspectsType('anterior')" id="btn-ant" class="flex-1 py-2 text-sm font-medium rounded-md bg-blue-50 text-blue-700 shadow-sm transition-all">前循环 (MCA)</button>
+                    <button onclick="setAspectsType('posterior')" id="btn-post" class="flex-1 py-2 text-sm font-medium rounded-md text-gray-500 hover:bg-gray-50 transition-all">后循环 (pc-ASPECTS)</button>
+                </div>
+
+                <!-- 前循环内容区 (Anterior) -->
+                <div id="aspects-anterior-panel" class="space-y-4">
+                    <div class="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+                        <div class="text-center mb-4 flex justify-between items-center border-b border-gray-50 pb-2">
+                            <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">NCCT 解剖参照</span>
+                            <span class="text-[10px] text-gray-400">仅示意，请在下方评分</span>
+                        </div>
+                        
+                        <!-- 静态图片展示区 -->
+                        <div class="grid grid-cols-2 gap-3 mb-4">
+                            <!-- 基底节层面 -->
+                            <div class="flex flex-col items-center">
+                                <div class="w-full aspect-square bg-black rounded-lg overflow-hidden mb-1 relative group">
+                                    <img src="aspects_gang.jpg.jpg" alt="基底节层面" class="ref-image" onerror="this.onerror=null;this.src='aspects_gang.jpg';">
+                                </div>
+                                <span class="text-[10px] text-gray-500">基底节层面</span>
+                            </div>
+                            <!-- 核上层面 -->
+                            <div class="flex flex-col items-center">
+                                <div class="w-full aspect-square bg-black rounded-lg overflow-hidden mb-1 relative">
+                                    <img src="aspects_supra.jpg" alt="核上层面" class="ref-image">
+                                </div>
+                                <span class="text-[10px] text-gray-500">核上层面</span>
+                            </div>
+                        </div>
+
+                        <!-- 区域选择按钮 -->
+                        <div class="space-y-3">
+                            <div>
+                                <h4 class="text-xs font-bold text-slate-700 mb-1 border-l-2 border-blue-400 pl-1.5">基底节层面 (Basal Ganglia)</h4>
+                                <div class="grid grid-cols-2 gap-2 text-xs">
+                                    <button class="aspect-text-btn p-2 border rounded text-left px-3 bg-white text-slate-600" data-region="C" onclick="toggleAspect('C')"><span class="font-bold mr-1">C</span> 尾状核</button>
+                                    <button class="aspect-text-btn p-2 border rounded text-left px-3 bg-white text-slate-600" data-region="L" onclick="toggleAspect('L')"><span class="font-bold mr-1">L</span> 豆状核</button>
+                                    <button class="aspect-text-btn p-2 border rounded text-left px-3 bg-white text-slate-600" data-region="IC" onclick="toggleAspect('IC')"><span class="font-bold mr-1">IC</span> 内囊</button>
+                                    <button class="aspect-text-btn p-2 border rounded text-left px-3 bg-white text-slate-600" data-region="I" onclick="toggleAspect('I')"><span class="font-bold mr-1">I</span> 岛叶皮质</button>
+                                    <button class="aspect-text-btn p-2 border rounded text-left px-3 bg-white text-slate-600" data-region="M1" onclick="toggleAspect('M1')"><span class="font-bold mr-1">M1</span> 前皮质</button>
+                                    <button class="aspect-text-btn p-2 border rounded text-left px-3 bg-white text-slate-600" data-region="M2" onclick="toggleAspect('M2')"><span class="font-bold mr-1">M2</span> 岛叶外侧皮质</button>
+                                    <button class="aspect-text-btn p-2 border rounded text-left px-3 bg-white text-slate-600" data-region="M3" onclick="toggleAspect('M3')"><span class="font-bold mr-1">M3</span> 后皮质</button>
+                                </div>
+                            </div>
+                            <div>
+                                <h4 class="text-xs font-bold text-slate-700 mb-1 border-l-2 border-blue-400 pl-1.5">核上层面 (Supraganglionic)</h4>
+                                <div class="grid grid-cols-2 gap-2 text-xs">
+                                    <button class="aspect-text-btn p-2 border rounded text-left px-3 bg-white text-slate-600" data-region="M4" onclick="toggleAspect('M4')"><span class="font-bold mr-1">M4</span> M1上方前皮质</button>
+                                    <button class="aspect-text-btn p-2 border rounded text-left px-3 bg-white text-slate-600" data-region="M5" onclick="toggleAspect('M5')"><span class="font-bold mr-1">M5</span> M2上方侧皮质</button>
+                                    <button class="aspect-text-btn p-2 border rounded text-left px-3 bg-white text-slate-600" data-region="M6" onclick="toggleAspect('M6')"><span class="font-bold mr-1">M6</span> M3上方后皮质</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 后循环内容区 (Posterior - pc-ASPECTS) -->
+                <div id="aspects-posterior-panel" class="space-y-4 hidden">
+                    <div class="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+                        <div class="text-center mb-4 flex justify-between items-center border-b border-gray-50 pb-2">
+                            <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">pc-ASPECTS (10分)</span>
+                            <span class="text-[10px] text-gray-400">参考图示</span>
+                        </div>
+
+                        <!-- 静态图片展示区 -->
+                        <div class="flex justify-center mb-4">
+                            <div class="w-full aspect-video bg-black rounded-lg overflow-hidden relative">
+                                <img src="aspects_post.jpg" alt="后循环参考" class="ref-image">
+                            </div>
+                        </div>
+
+                        <!-- 列表辅助选择 -->
+                        <div class="grid grid-cols-2 gap-3">
+                            <button class="aspect-pc-btn p-3 border rounded-lg text-sm text-left flex justify-between" data-region="Midbrain" onclick="togglePcAspect(this, 'Midbrain')"><span>中脑 (Midbrain)</span><span class="text-xs text-gray-400">2分</span></button>
+                            <button class="aspect-pc-btn p-3 border rounded-lg text-sm text-left flex justify-between" data-region="Pons" onclick="togglePcAspect(this, 'Pons')"><span>桥脑 (Pons)</span><span class="text-xs text-gray-400">2分</span></button>
+                            
+                            <button class="aspect-pc-btn p-3 border rounded-lg text-sm text-left flex justify-between" data-region="L-Thalamus" onclick="togglePcAspect(this, 'L-Thalamus')"><span>左丘脑</span><span class="text-xs text-gray-400">1分</span></button>
+                            <button class="aspect-pc-btn p-3 border rounded-lg text-sm text-left flex justify-between" data-region="R-Thalamus" onclick="togglePcAspect(this, 'R-Thalamus')"><span>右丘脑</span><span class="text-xs text-gray-400">1分</span></button>
+                            
+                            <button class="aspect-pc-btn p-3 border rounded-lg text-sm text-left flex justify-between" data-region="L-Cerebellum" onclick="togglePcAspect(this, 'L-Cerebellum')"><span>左小脑</span><span class="text-xs text-gray-400">1分</span></button>
+                            <button class="aspect-pc-btn p-3 border rounded-lg text-sm text-left flex justify-between" data-region="R-Cerebellum" onclick="togglePcAspect(this, 'R-Cerebellum')"><span>右小脑</span><span class="text-xs text-gray-400">1分</span></button>
+                            
+                            <button class="aspect-pc-btn p-3 border rounded-lg text-sm text-left flex justify-between" data-region="L-Occipital" onclick="togglePcAspect(this, 'L-Occipital')"><span>左枕叶</span><span class="text-xs text-gray-400">1分</span></button>
+                            <button class="aspect-pc-btn p-3 border rounded-lg text-sm text-left flex justify-between" data-region="R-Occipital" onclick="togglePcAspect(this, 'R-Occipital')"><span>右枕叶</span><span class="text-xs text-gray-400">1分</span></button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 4. Hunt-Hess 模块 -->
+            <div id="hunthess" class="tab-content max-w-2xl mx-auto space-y-4">
+                <div class="flex flex-col gap-2" id="hunthess-options"></div>
+            </div>
+        </main>
+
+        <!-- 底部结果栏 -->
+        <footer class="bg-white border-t border-gray-200 fixed bottom-0 w-full z-20 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] flex flex-col">
+             <!-- 动态建议区域 -->
+            <div id="treatment-advice" class="hidden text-xs px-4 py-2 border-b border-gray-100 bg-slate-50"></div>
+            
+            <div class="p-4 flex justify-between items-center max-w-2xl mx-auto w-full">
+                <div class="flex flex-col">
+                    <div class="text-[10px] text-gray-400 uppercase tracking-wide font-bold" id="current-score-label">总评分</div>
+                    <div class="flex items-center gap-2">
+                        <div class="text-3xl font-extrabold text-slate-800 leading-none" id="current-score-value">--</div>
+                        <div class="text-xs font-semibold px-2 py-1 rounded hidden" id="current-score-severity"></div>
+                    </div>
+                </div>
+                <button onclick="copyResult()" class="bg-slate-900 hover:bg-slate-800 text-white px-5 py-2.5 rounded-xl font-medium text-sm flex items-center gap-2 transition-colors shadow-lg shadow-slate-200">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+                    复制结果
+                </button>
+            </div>
+        </footer>
+        <div id="copy-toast" class="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-slate-900 text-white px-4 py-2 rounded-lg text-sm transition-opacity duration-300 opacity-0 pointer-events-none z-50 shadow-xl">已复制到剪贴板</div>
+    </section>
+
+    <script>
+        // --- Data Definitions ---
+        const gcsData = {
+            eye: [{s:4,t:"自动睁眼"},{s:3,t:"呼唤睁眼"},{s:2,t:"刺痛睁眼"},{s:1,t:"无反应"}],
+            verbal: [{s:5,t:"回答正确"},{s:4,t:"回答错误"},{s:3,t:"词不达意"},{s:2,t:"只能发音"},{s:1,t:"无反应"}],
+            motor: [{s:6,t:"遵嘱动作"},{s:5,t:"刺痛定位"},{s:4,t:"刺痛躲避"},{s:3,t:"去皮层屈曲"},{s:2,t:"去脑强直"},{s:1,t:"无反应"}]
+        };
+
+        const nihssData = [
+            {
+                id:"1a", title:"1a. 意识水平", instruction:"观察、提问",
+                opts:[
+                    {s:0,t:"清醒", desc:"警觉，反应灵敏"},
+                    {s:1,t:"嗜睡", desc:"轻微刺激能唤醒，可回答"},
+                    {s:2,t:"昏睡", desc:"强刺激能唤醒，反应非刻板"},
+                    {s:3,t:"昏迷", desc:"反射消失或仅有反射"}
+                ]
+            },
+            {
+                id:"1b", title:"1b. 意识提问", instruction:"提问：现在是几月份？你的年龄是多少？",
+                opts:[
+                    {s:0,t:"两项均正确", desc:""},
+                    {s:1,t:"一项正确", desc:"气管插管、构音障碍者评1分"},
+                    {s:2,t:"两项均不正确", desc:"失语、昏迷者评2分"}
+                ]
+            },
+            {
+                id:"1c", title:"1c. 意识指令", instruction:"指令：睁眼闭眼；握拳松手",
+                opts:[
+                    {s:0,t:"两项均正确", desc:""},
+                    {s:1,t:"一项正确", desc:""},
+                    {s:2,t:"两项均不正确", desc:""}
+                ]
+            },
+            {
+                id:"2", title:"2. 凝视", instruction:"只测试水平眼球运动",
+                opts:[
+                    {s:0,t:"正常", desc:""},
+                    {s:1,t:"部分凝视麻痹", desc:"眼球运动异常，但可被“玩偶眼”试验克服"},
+                    {s:2,t:"强迫凝视", desc:"眼球固定偏向一侧，不能被克服"}
+                ]
+            },
+            {
+                id:"3", title:"3. 视野", instruction:"测试四象限，通过手指数或视觉威胁",
+                opts:[
+                    {s:0,t:"无视野缺损", desc:""},
+                    {s:1,t:"部分偏盲", desc:"象限盲"},
+                    {s:2,t:"完全偏盲", desc:"单侧上下象限均盲"},
+                    {s:3,t:"双侧偏盲 (全盲)", desc:"皮质盲"}
+                ]
+            },
+            {
+                id:"4", title:"4. 面瘫", instruction:"指令：示齿/扬眉/闭眼",
+                opts:[
+                    {s:0,t:"正常", desc:""},
+                    {s:1,t:"轻微", desc:"鼻唇沟变浅，微笑时不对称"},
+                    {s:2,t:"部分", desc:"下半面部全瘫"},
+                    {s:3,t:"完全", desc:"上、下半面部全瘫（单侧或双侧）"}
+                ]
+            },
+            {
+                id:"5a", title:"5a. 左上肢运动", instruction:"平举：坐位90°/卧位45°，坚持10秒", timer: 10,
+                opts:[
+                    {s:0,t:"0: 抬举10s", desc:"无下落"},
+                    {s:1,t:"1: <10s", desc:"能抬举但10s内下落，不撞床"},
+                    {s:2,t:"2: 不抗重力", desc:"有些微抵抗重力或只能平移"},
+                    {s:3,t:"3: 无重力", desc:"能平移但不能抬起"},
+                    {s:4,t:"4: 无运动", desc:"完全瘫痪"},
+                    {s:9,t:"UN", label:"UN", desc:"截肢 / 关节融合 / 骨折 / 物理受限无法测试"}
+                ]
+            },
+            {
+                id:"5b", title:"5b. 右上肢运动", instruction:"平举：坐位90°/卧位45°，坚持10秒", timer: 10,
+                opts:[
+                    {s:0,t:"0: 抬举10s", desc:""}, {s:1,t:"1: <10s", desc:""}, {s:2,t:"2: 不抗重力", desc:""}, 
+                    {s:3,t:"3: 无重力", desc:""}, {s:4,t:"4: 无运动", desc:""}, {s:9,t:"UN", label:"UN", desc:"截肢 / 关节融合 / 骨折 / 物理受限无法测试"}
+                ]
+            },
+            {
+                id:"6a", title:"6a. 左下肢运动", instruction:"卧位抬高30°，坚持5秒", timer: 5,
+                opts:[
+                    {s:0,t:"0: 抬举5s", desc:"无下落"},
+                    {s:1,t:"1: <5s", desc:"5s内下落，不撞床"},
+                    {s:2,t:"2: 不抗重力", desc:"有些微抵抗重力或只能平移"},
+                    {s:3,t:"3: 无重力", desc:"能平移但不能抬起"},
+                    {s:4,t:"4: 无运动", desc:"完全瘫痪"},
+                    {s:9,t:"UN", label:"UN", desc:"截肢 / 关节融合 / 骨折 / 物理受限无法测试"}
+                ]
+            },
+            {
+                id:"6b", title:"6b. 右下肢运动", instruction:"卧位抬高30°，坚持5秒", timer: 5,
+                opts:[
+                    {s:0,t:"0: 抬举5s", desc:""}, {s:1,t:"1: <5s", desc:""}, {s:2,t:"2: 不抗重力", desc:""}, 
+                    {s:3,t:"3: 无重力", desc:""}, {s:4,t:"4: 无运动", desc:""}, {s:9,t:"UN", label:"UN", desc:"截肢 / 关节融合 / 骨折 / 物理受限无法测试"}
+                ]
+            },
+            {
+                id:"7", title:"7. 肢体共济失调", instruction:"指鼻试验、跟膝胫试验",
+                opts:[
+                    {s:0,t:"无", desc:"无共济失调或瘫痪无法测试"},
+                    {s:1,t:"一个肢体", desc:"单侧上肢或下肢"},
+                    {s:2,t:"两个肢体", desc:"两侧或单侧上下肢"},
+                    {s:9,t:"UN", label:"UN", desc:"截肢 / 关节融合 / 无法理解指令"}
+                ]
+            },
+            {
+                id:"8", title:"8. 感觉", instruction:"针刺皮肤（面、肢体），比较两侧",
+                opts:[
+                    {s:0,t:"正常", desc:""},
+                    {s:1,t:"轻-中度", desc:"针刺感减退，但有触觉"},
+                    {s:2,t:"重度-完全", desc:"触觉痛觉完全丧失（昏迷者评2分）"}
+                ]
+            },
+            {
+                id:"9", title:"9. 语言", instruction:"描述图片、命名物体、读句子",
+                opts:[
+                    {s:0,t:"正常", desc:""},
+                    {s:1,t:"轻-中度失语", desc:"表达流利但有错语，或理解困难但能交流"},
+                    {s:2,t:"重度失语", desc:"破碎语言，交流极其困难"},
+                    {s:3,t:"哑/失语", desc:"完全无语言能力，或昏迷"}
+                ]
+            },
+            {
+                id:"10", title:"10. 构音障碍", instruction:"读词表",
+                opts:[
+                    {s:0,t:"正常", desc:""},
+                    {s:1,t:"轻-中度", desc:"含糊不清，但能听懂"},
+                    {s:2,t:"重度", desc:"言语无法理解，或无语/昏迷"},
+                    {s:9,t:"UN", label:"UN", desc:"气管插管 / 物理障碍 (气管切开/面部创伤)"}
+                ]
+            },
+            {
+                id:"11", title:"11. 忽视症", instruction:"双侧同时刺激（视觉、触觉）",
+                opts:[
+                    {s:0,t:"正常", desc:""},
+                    {s:1,t:"一项缺失", desc:"视、触、听、空间觉中一项忽视"},
+                    {s:2,t:"严重忽视", desc:"一项以上忽视，或不识自己肢体"}
+                ]
+            }
+        ];
+
+        const hunthessData = [
+            {s:1,t:"I级: 无/轻微症状"},{s:2,t:"II级: 中-重度头痛，脑膜征"},{s:3,t:"III级: 嗜睡/意识模糊"},{s:4,t:"IV级: 昏迷，偏瘫，去脑早期"},{s:5,t:"V级: 深昏迷，去脑强直"}
+        ];
+
+        // --- State ---
+        let currentTab = 'gcs';
+        let aspectsType = 'anterior'; // 'anterior' or 'posterior'
+        let timerInterval = null;
+        
+        const scores = {
+            gcs: {e:null, v:null, m:null, t:false},
+            nihss: {},
+            aspects: { 
+                anterior: [], // list of region strings
+                posterior: [], // list of region strings
+                antScore: 10,
+                postScore: 10
+            },
+            hunthess: null,
+            severityStr: "",
+            adviceStr: "" // 存储治疗建议
+        };
+
+        // --- Init ---
+        function init() {
+            renderGCS();
+            renderNIHSS();
+            renderHuntHess();
+            // Start at home
+            document.getElementById('view-home').classList.add('active');
+            document.getElementById('view-app').classList.remove('active');
+        }
+
+        // --- Navigation ---
+        function enterApp(tab) {
+            document.getElementById('view-home').classList.remove('active');
+            document.getElementById('view-app').classList.add('active');
+            switchTab(tab);
+        }
+
+        function goHome() {
+            document.getElementById('view-app').classList.remove('active');
+            document.getElementById('view-home').classList.add('active');
+        }
+
+        function switchTab(tabId) {
+            currentTab = tabId;
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+            document.getElementById(tabId).classList.add('active');
+            
+            // Header Tabs Update
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('text-slate-900', 'border-slate-900');
+                btn.classList.add('text-gray-500', 'border-transparent');
+            });
+            document.getElementById('tab-btn-' + tabId).classList.add('text-slate-900', 'border-slate-900');
+            document.getElementById('tab-btn-' + tabId).classList.remove('text-gray-500', 'border-transparent');
+
+            // Header Title Update
+            const titles = {gcs: "GCS 评分", nihss: "NIHSS 评分", aspects: "ASPECTS 评分", hunthess: "Hunt-Hess 分级"};
+            document.getElementById('header-title').innerText = titles[tabId];
+
+            updateFooter();
+        }
+
+        // --- Render Functions ---
+        function renderGCS() {
+            const createBtn = (group, item) => `<button onclick="setGCS('${group}',${item.s},this)" class="option-btn w-full text-left px-3 py-3 rounded-lg bg-white text-sm flex justify-between items-center group"><span>${item.t}</span><span class="font-bold text-gray-300 group-[.selected]:text-white score-badge px-2 py-0.5 rounded text-xs transition-colors">${item.s}</span></button>`;
+            document.getElementById('gcs-e-options').innerHTML = gcsData.eye.map(i=>createBtn('e',i)).join('');
+            document.getElementById('gcs-v-options').innerHTML = gcsData.verbal.map(i=>createBtn('v',i)).join('');
+            document.getElementById('gcs-m-options').innerHTML = gcsData.motor.map(i=>createBtn('m',i)).join('');
+        }
+
+        function renderNIHSS() {
+            document.getElementById('nihss-container').innerHTML = nihssData.map(q => `
+                <div class="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+                    <div class="mb-3 flex justify-between items-start">
+                        <div>
+                            <h3 class="text-sm font-bold text-slate-800 border-l-4 border-indigo-500 pl-2">${q.title}</h3>
+                            <p class="text-[10px] text-slate-400 mt-1 pl-3 italic">${q.instruction}</p>
+                        </div>
+                        ${q.timer ? `<button onclick="startTimer(this, ${q.timer})" class="text-xs bg-blue-50 text-blue-600 px-3 py-1.5 rounded-full font-bold border border-blue-100 flex items-center gap-1 hover:bg-blue-100 transition-colors"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> 计时 ${q.timer}s</button>` : ''}
+                    </div>
+                    <div class="grid grid-cols-1 gap-2">
+                        ${q.opts.map(opt => `
+                        <button onclick="setNIHSS('${q.id}',${opt.s},this)" class="option-btn w-full text-left px-3 py-2.5 rounded-lg border text-sm nihss-btn-${q.id}">
+                            <div class="flex justify-between items-center">
+                                <span class="font-medium">${opt.t}</span>
+                                <span class="font-bold text-gray-300 score-badge px-2 py-0.5 rounded text-xs">${opt.label||opt.s}</span>
+                            </div>
+                            ${opt.desc ? `<div class="text-[10px] text-gray-400 mt-1 font-normal">${opt.desc}</div>` : ''}
+                        </button>`).join('')}
+                    </div>
+                </div>`).join('');
+        }
+
+        function renderHuntHess() {
+            document.getElementById('hunthess-options').innerHTML = hunthessData.map(i => `<button onclick="setHuntHess(${i.s},'${i.t}',this)" class="option-btn w-full text-left px-4 py-4 rounded-xl bg-white shadow-sm border border-gray-100 text-sm font-medium text-gray-700 hover:border-amber-200">${i.t}</button>`).join('');
+        }
+
+        // --- Logic Handlers ---
+        
+        function startTimer(btn, seconds) {
+            if(btn.classList.contains('timer-active')) return; 
+            
+            const originalText = btn.innerHTML;
+            let timeLeft = seconds;
+            
+            btn.classList.add('timer-active');
+            btn.innerHTML = `${timeLeft}s`;
+            
+            const tick = () => {
+                timeLeft--;
+                if(timeLeft > 0) {
+                    btn.innerHTML = `${timeLeft}s`;
+                    setTimeout(tick, 1000);
+                } else {
+                    btn.classList.remove('timer-active');
+                    btn.innerHTML = "完成";
+                    setTimeout(() => {
+                        btn.innerHTML = originalText;
+                    }, 2000);
+                }
+            };
+            setTimeout(tick, 1000);
+        }
+
+        // GCS
+        function setGCS(g, v, btn) {
+            scores.gcs[g] = v;
+            btn.parentElement.querySelectorAll('.option-btn').forEach(b=>b.classList.remove('selected'));
+            btn.classList.add('selected');
+            updateFooter();
+        }
+        function updateGCS() { scores.gcs.t = document.getElementById('gcs-t-flag').checked; updateFooter(); }
+
+        // NIHSS
+        function setNIHSS(id, v, btn) {
+            scores.nihss[id] = v;
+            btn.parentElement.querySelectorAll('.option-btn').forEach(b=>{b.classList.remove('selected'); });
+            btn.classList.add('selected');
+            updateFooter();
+        }
+
+        // ASPECTS
+        function setAspectsType(type) {
+            aspectsType = type;
+            const btnAnt = document.getElementById('btn-ant');
+            const btnPost = document.getElementById('btn-post');
+            const panelAnt = document.getElementById('aspects-anterior-panel');
+            const panelPost = document.getElementById('aspects-posterior-panel');
+
+            if(type === 'anterior') {
+                btnAnt.classList.add('bg-blue-50', 'text-blue-700', 'shadow-sm');
+                btnAnt.classList.remove('text-gray-500', 'hover:bg-gray-50');
+                btnPost.classList.add('text-gray-500', 'hover:bg-gray-50');
+                btnPost.classList.remove('bg-blue-50', 'text-blue-700', 'shadow-sm');
+                panelAnt.classList.remove('hidden');
+                panelPost.classList.add('hidden');
+            } else {
+                btnPost.classList.add('bg-blue-50', 'text-blue-700', 'shadow-sm');
+                btnPost.classList.remove('text-gray-500', 'hover:bg-gray-50');
+                btnAnt.classList.add('text-gray-500', 'hover:bg-gray-50');
+                btnAnt.classList.remove('bg-blue-50', 'text-blue-700', 'shadow-sm');
+                panelAnt.classList.add('hidden');
+                panelPost.classList.remove('hidden');
+            }
+            updateFooter();
+        }
+
+        function toggleAspect(region) {
+            const list = scores.aspects.anterior;
+            const idx = list.indexOf(region);
+            
+            if(idx > -1) list.splice(idx, 1);
+            else list.push(region);
+            
+            scores.aspects.antScore = 10 - list.length;
+            updateAspectVisuals(region, idx === -1);
+            
+            updateFooter();
+        }
+
+        function updateAspectVisuals(region, isActive) {
+            const btn = document.querySelector(`.aspect-text-btn[data-region="${region}"]`);
+            if(btn) {
+                if(isActive) {
+                    btn.classList.add('bg-rose-100', 'border-rose-500', 'text-rose-700', 'font-bold');
+                    btn.classList.remove('text-slate-600');
+                } else {
+                    btn.classList.remove('bg-rose-100', 'border-rose-500', 'text-rose-700', 'font-bold');
+                    btn.classList.add('text-slate-600');
+                }
+            }
+        }
+
+        function togglePcAspect(btn, region) {
+            
+            const list = scores.aspects.posterior;
+            const idx = list.indexOf(region);
+            const isActive = idx === -1;
+
+            if(idx > -1) list.splice(idx, 1);
+            else list.push(region);
+
+            // Calc posterior score
+            let deduction = 0;
+            list.forEach(r => {
+                if(r === 'Midbrain' || r === 'Pons') deduction += 2;
+                else deduction += 1;
+            });
+            scores.aspects.postScore = Math.max(0, 10 - deduction);
+
+            // Update visuals (Buttons)
+            const listBtn = document.querySelector(`.aspect-pc-btn[data-region="${region}"]`);
+            if(listBtn) {
+                 if(isActive) {
+                    listBtn.classList.add('bg-rose-100', 'border-rose-500', 'text-rose-700', 'font-bold');
+                } else {
+                    listBtn.classList.remove('bg-rose-100', 'border-rose-500', 'text-rose-700', 'font-bold');
+                }
+            }
+            
+            updateFooter();
+        }
+
+        // Hunt Hess
+        function setHuntHess(v, t, btn) {
+            scores.hunthess = v;
+            document.querySelectorAll('#hunthess-options .option-btn').forEach(b=>b.classList.remove('selected'));
+            btn.classList.add('selected');
+            updateFooter();
+        }
+
+        // --- Common ---
+        function updateFooter() {
+            const valEl = document.getElementById('current-score-value');
+            const sevEl = document.getElementById('current-score-severity');
+            const advEl = document.getElementById('treatment-advice');
+            
+            let val = "--", sevText = "", sevColor = "", sevBg = "";
+            let advice = "";
+            let adviceClass = "";
+
+            if (currentTab === 'gcs') {
+                advEl.classList.add('hidden'); 
+                const total = (scores.gcs.e||0) + (scores.gcs.v||0) + (scores.gcs.m||0);
+                if (scores.gcs.e && scores.gcs.v && scores.gcs.m) {
+                    val = total + (scores.gcs.t ? 'T' : '');
+                    if(total>=13){ sevText="轻度昏迷"; sevColor="text-green-700"; sevBg="bg-green-100"; }
+                    else if(total>=9){ sevText="中度昏迷"; sevColor="text-yellow-700"; sevBg="bg-yellow-100"; }
+                    else { sevText="重度昏迷"; sevColor="text-red-700"; sevBg="bg-red-100"; }
+                }
+            } else if (currentTab === 'nihss') {
+                let total = 0, un = 0;
+                Object.values(scores.nihss).forEach(v=>{if(v===9)un++; else total+=v;});
+                val = total + (un?` (+${un}UN)`:'');
+                
+                if(total===0) { 
+                    sevText="正常"; sevColor="text-green-700"; sevBg="bg-green-100"; 
+                } else if(total<=4){ 
+                    sevText="轻型卒中"; sevColor="text-blue-700"; sevBg="bg-blue-100"; 
+                    advice = "建议: 考虑IV溶栓(PRISMS)；若证实LVO且有致残风险，可考量血管内治疗(EVT)。";
+                    adviceClass = "caution";
+                } else if(total<=25){ 
+                    sevText="中重度卒中"; sevColor="text-yellow-700"; sevBg="bg-yellow-100"; 
+                    advice = "建议: 大血管闭塞患者强烈推荐血管内治疗(EVT)及IV溶栓 (IA类证据/HERMES)。";
+                    adviceClass = "urgent";
+                } else { 
+                    sevText="极重度卒中"; sevColor="text-red-700"; sevBg="bg-red-100"; 
+                    advice = "建议: 预后较差。需结合核心梗死体积评估EVT获益，警惕出血风险。";
+                    adviceClass = "caution";
+                }
+            } else if (currentTab === 'aspects') {
+                if(aspectsType === 'anterior') {
+                    const s = scores.aspects.antScore;
+                    val = s + "分";
+                    if(s >= 6) { 
+                        sevText="小核心梗死"; sevColor="text-green-700"; sevBg="bg-green-100"; 
+                        advice = "建议: 适合血管内治疗(EVT)，获益显著 (HERMES meta-analysis)。";
+                        adviceClass = "suggest";
+                    } else if (s >= 3) {
+                        sevText="大核心梗死"; sevColor="text-yellow-700"; sevBg="bg-yellow-100";
+                        advice = "建议: 近期RCT(ANGEL-ASPECT, SELECT2)显示EVT仍优于单纯药物治疗，建议积极评估。";
+                        adviceClass = "urgent";
+                    } else { 
+                        sevText="广泛梗死"; sevColor="text-red-700"; sevBg="bg-red-100"; 
+                        advice = "建议: 梗死范围极大，EVT获益不明确且风险高，建议保守治疗或极其慎重决策。";
+                        adviceClass = "caution";
+                    }
+                } else {
+                    val = scores.aspects.postScore + "分";
+                    if(scores.aspects.postScore >= 8) { sevText="预后较好"; sevColor="text-green-700"; sevBg="bg-green-100"; }
+                    else { sevText="预后不良"; sevColor="text-red-700"; sevBg="bg-red-100"; }
+                    advice = "注: 后循环缺血目前尚无像前循环那样完善的基于ASPECTS的RCT证据，需结合临床。";
+                    adviceClass = "caution";
+                }
+            } else if (currentTab === 'hunthess') {
+                advEl.classList.add('hidden'); 
+                val = scores.hunthess ? "Grade " + scores.hunthess : "--";
+                if(scores.hunthess) {
+                    if(scores.hunthess<=2){ sevText="低死亡率"; sevColor="text-green-700"; sevBg="bg-green-100"; }
+                    else { sevText="高死亡率"; sevColor="text-red-700"; sevBg="bg-red-100"; }
+                }
+            }
+
+            valEl.innerText = val;
+            scores.severityStr = sevText;
+            scores.adviceStr = advice; 
+
+            if(sevText) {
+                sevEl.innerText = sevText;
+                sevEl.className = `text-xs font-semibold px-2 py-1 rounded ${sevColor} ${sevBg}`;
+                sevEl.classList.remove('hidden');
+            } else {
+                sevEl.classList.add('hidden');
+            }
+
+            // 更新建议框
+            if(advice) {
+                advEl.className = `text-xs px-4 py-3 border-b border-gray-100 advice-box ${adviceClass}`;
+                advEl.innerHTML = `<span class="font-bold">临床指引:</span> ${advice}`;
+                advEl.classList.remove('hidden');
+            } else {
+                advEl.classList.add('hidden');
+            }
+        }
+
+        function resetAll() {
+            if(!confirm("重置当前所有评分?")) return;
+            scores.gcs = {e:null, v:null, m:null, t:false};
+            scores.nihss = {};
+            scores.aspects = {anterior:[], posterior:[], antScore:10, postScore:10};
+            scores.hunthess = null;
+            scores.severityStr = "";
+            scores.adviceStr = "";
+            
+            document.querySelectorAll('.option-btn').forEach(b=>b.classList.remove('selected'));
+            document.querySelectorAll('.aspect-text-btn').forEach(b=>{
+                b.className="aspect-text-btn p-2 border rounded text-left px-3 bg-white text-slate-600";
+            });
+            document.querySelectorAll('.aspect-pc-btn').forEach(b=>b.classList.remove('bg-rose-100', 'border-rose-500', 'text-rose-700', 'font-bold'));
+            
+            document.getElementById('gcs-t-flag').checked = false;
+            
+            updateFooter();
+        }
+
+        function copyResult() {
+            let t = `【群力神经外科评分】${new Date().toLocaleString()}\n`;
+            if(currentTab === 'gcs') {
+                const tot = (scores.gcs.e||0)+(scores.gcs.v||0)+(scores.gcs.m||0);
+                t += `GCS: ${tot}${scores.gcs.t?'T':''} [${scores.severityStr}] (E${scores.gcs.e} V${scores.gcs.v} M${scores.gcs.m})`;
+            } else if (currentTab === 'nihss') {
+                let tot = 0; Object.values(scores.nihss).forEach(v=>{if(v!==9)tot+=v;});
+                t += `NIHSS: ${tot}分 [${scores.severityStr}]`;
+                if(scores.adviceStr) t += `\n${scores.adviceStr}`;
+            } else if (currentTab === 'aspects') {
+                if(aspectsType === 'anterior') {
+                    t += `ASPECTS(前): ${scores.aspects.antScore}分 [${scores.severityStr}]\n受累: ${scores.aspects.anterior.join(',') || '无'}`;
+                } else {
+                    t += `pc-ASPECTS(后): ${scores.aspects.postScore}分 [${scores.severityStr}]\n受累: ${scores.aspects.posterior.join(',') || '无'}`;
+                }
+                if(scores.adviceStr) t += `\n${scores.adviceStr}`;
+            } else if (currentTab === 'hunthess') t += `Hunt-Hess: Grade ${scores.hunthess} [${scores.severityStr}]`;
+            
+            if(navigator.clipboard){navigator.clipboard.writeText(t).then(toast);}
+            else {
+                const el = document.createElement('textarea'); el.value=t; document.body.appendChild(el); el.select(); document.execCommand('copy'); document.body.removeChild(el); toast();
+            }
+        }
+        function toast(){const el=document.getElementById('copy-toast');el.style.opacity=1;setTimeout(()=>el.style.opacity=0,2000);}
+
+        init();
+    </script>
+</body>
+</html>
